@@ -11,6 +11,6 @@ spin_boresight_angle_deg = 50.0
 
 [planet_scanning]
 spin2ecl_delta_time_s = 60.0
-planet_name = "jupiter"
+planet_name = "neptune"
 output_nside = 1024
-sampling_rate_hz = 0.000005
+sampling_rate_hz = 0.00001

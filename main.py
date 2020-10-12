@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import astropy
 import healpy
-import logging
+import logging as log
 import os
 import sys
 import math
@@ -11,7 +11,7 @@ import inspect
 from modules import utils, objects, scanningstrategy as ss,errors
 import astropy.time
 import astropy.units as u
-from astropy.coordinates import (
+from astropy.coordinates import(
     ICRS,
     get_body_barycentric,
     BarycentricMeanEcliptic,
@@ -21,11 +21,12 @@ from numba import jit
 import time
 import argparse
 
-log = logging.getLogger()
-logging.basicConfig(
-    level=logging.INFO,
+#log = logging.getLogger()
+log.basicConfig(
+    level=log.INFO,
     format='%(levelname)-8s %(asctime)-15s %(process)4d:%(threadName)-11s '+utils.Colors.FAIL+'%(name)s %(message)s'+utils.Colors.ENDC
 )
+
 commandline_args = utils.parser()
 if commandline_args["plot"].lower() not in ["x","y","z","d"]:
     raise errors.InputError("main.plot.commandline_args",
@@ -67,18 +68,22 @@ planet_params = sim.parameters["planet_scanning"]
 scan_params = imo.query(
     scanning_params["scanning_strategy_obj"]
 )
-
-#Instrumental variables
 metadata = scan_params.metadata
+
+#print(inspect.getsource(lbs.imo.objects.DataFile))
+#Instrumental variables
 strat = ss.LBScanningStrategy(metadata)
 instr = lbs.Instrument(name="LiteBIRD", spin_boresight_angle_deg=sim.parameters["scanning_strategy"]["spin_boresight_angle_deg"])
 det = lbs.DetectorInfo(
     name="Boresight", sampling_rate_hz=sim.parameters["planet_scanning"]["sampling_rate_hz"]
 )
-obs, = sim.create_observations(detectors=[det])
+det2 = lbs.DetectorInfo(
+    name = "Detector2", sampling_rate_hz = sim.parameters["planet_scanning"]["sampling_rate_hz"]
+)
+obs, = sim.create_observations(detectors=[det,det2])
 print(utils.Colors.WARNING+"----> Number of samples: "+utils.Colors.ENDC, obs.tod.shape[1])
 
-utils.print_inputs(simulation=sim,detector=det,instrument=instr,strategy=strat)
+utils.print_inputs(simulation=sim,detector=det,instrument=instr,strategy=strat,observation=obs)
 
 #*******************************+**  CALCULATIONS  ***************+
 
@@ -117,7 +122,7 @@ print("Writing outputs to file "+str(filename))
 writing_start = time.time()
 if bool(commandline_args["file"]):
     utils.write_to_file(filename,icrs_pos)
-print("Written to file in "+str(time.time()-writing_start))
+print("Written to file in "+str(time.time()-writing_start)+" seconds")
 
 ecl_vec = (ICRS(icrs_pos)
            .transform_to(BarycentricMeanEcliptic)
@@ -132,7 +137,7 @@ ecl_vec = ecl_vec.transpose()
 #daprint("Vectors normalized to unit vectors and transposed.")
 quats = obs.get_ecl2det_quaternions(
     sim.spin2ecliptic_quats,
-    detector_quats=[det.quat],
+    detector_quats=[det.quat,det2.quat],
     bore2spin_quat=instr.bore2spin_quat,
 )
 #Now we have the vectors in the DETECTOR frame of reference
@@ -144,6 +149,7 @@ if ecl_vec.shape[0] == obs.tod.shape[1]:
     print(message+"  -- Good")
 else:
     log.fatal("DimensionalError: ecl_vec & tod.shape")
+
 utils.empty_print(1)
 if bool(commandline_args["file"]):
     utils.write_to_file(filename2,ecl_vec)
@@ -156,14 +162,18 @@ y = utils.column(det_vec_matrix, 1)
 z = utils.column(det_vec_matrix, 2)
 distance = [ math.sqrt(x[i]**2 + y[i]**2 + z[i]**2)  for i in range(len(x))]
 
-if commandline_args["plot"] == "x":
-    plt.plot(nums,x)
-elif commandline_args["plot"] == "y":
-    plt.plot(nums,y)
-elif commandline_args["plot"] == "z":
-    plt.plot(nums, z)
-elif commandline_args["plot"] == "d":
-    plt.plot(nums, distance)
+#if commandline_args["plot"] == "x":
+#    plt.plot(nums,x)
+#elif commandline_args["plot"] == "y":
+#    plt.plot(nums,y)
+#elif commandline_args["plot"] == "z":
+#    plt.plot(nums, z)
+theta, phi = healpy.vec2ang(det_vec)
+if commandline_args["plot"] == "d":
+    times = obs.get_times()
+    plt.plot(times - times[0], np.rad2deg(theta))
+    plt.xlabel("Time [s]")
+    plt.ylabel("Angular separation [deg]")
 else:
     pass
 
